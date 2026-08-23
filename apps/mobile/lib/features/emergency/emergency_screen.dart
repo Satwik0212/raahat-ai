@@ -6,6 +6,7 @@ import 'package:raahat/services/emergency_service.dart';
 import 'package:raahat/core/constants/enums.dart';
 import 'package:raahat/core/theme/design_tokens.dart';
 import 'package:raahat/core/theme/raahat_widgets.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Interactive emergency reporting screen using situation-aware AI analysis.
 class EmergencyScreen extends StatefulWidget {
@@ -424,10 +425,19 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
             final name = service['name']?.toString() ?? 'Unknown Service';
             final type = service['service_type']?.toString() ?? '';
             final distance = service['distance'] != null ? '${service['distance']} km' : '';
-            final address = service['address']?.toString() ?? '';
+            String address = '';
+            final addressMap = service['address'];
+            if (addressMap is Map) {
+              address = addressMap['formatted_address']?.toString() ?? '';
+            } else if (addressMap != null) {
+              address = addressMap.toString();
+            }
             final phone = service['phone']?.toString() ?? '';
             final eta = service['eta']?.toString() ?? '';
             final provider = service['provider']?.toString() ?? '';
+            final location = service['location'];
+            final lat = location != null && location is Map ? location['latitude'] : null;
+            final lng = location != null && location is Map ? location['longitude'] : null;
 
             return Padding(
               padding: const EdgeInsets.only(bottom: RaahatSpacing.md),
@@ -514,6 +524,41 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
                         ],
                       ),
                     ],
+                    const SizedBox(height: RaahatSpacing.md),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (phone.isNotEmpty)
+                          TextButton.icon(
+                            onPressed: () async {
+                              final Uri uri = Uri.parse('tel:$phone');
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri);
+                              } else {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Call unavailable')),
+                                );
+                              }
+                            },
+                            icon: const Icon(Icons.phone),
+                            label: const Text('Call'),
+                          ),
+                        if (lat != null && lng != null)
+                          TextButton.icon(
+                            onPressed: () async {
+                              final Uri uri = Uri.parse('google.navigation:q=$lat,$lng');
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri);
+                              } else {
+                                final Uri fallbackUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+                                await launchUrl(fallbackUri);
+                              }
+                            },
+                            icon: const Icon(Icons.navigation),
+                            label: const Text('Navigate'),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -768,10 +813,62 @@ class _EmergencyScreenState extends State<EmergencyScreen> {
                 borderRadius: BorderRadius.circular(RaahatRadius.button),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(RaahatRadius.button),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Action selected: $label')),
-                    );
+                  onTap: () async {
+                    if (actionType == 'CALL' || actionType.startsWith('CALL_')) {
+                      // Try to find a phone number in the services list
+                      final servicesList = _response?['services'] as List<dynamic>? ?? [];
+                      String? targetPhone;
+                      for (var s in servicesList) {
+                        if (s['phone'] != null && s['phone'].toString().isNotEmpty) {
+                          targetPhone = s['phone'].toString();
+                          break;
+                        }
+                      }
+                      if (targetPhone != null) {
+                        final Uri uri = Uri.parse('tel:$targetPhone');
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Call unavailable')),
+                          );
+                        }
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Call unavailable')),
+                        );
+                      }
+                    } else if (actionType == 'NAVIGATE') {
+                      // Try to find a location in the services list
+                      final servicesList = _response?['services'] as List<dynamic>? ?? [];
+                      dynamic targetLat;
+                      dynamic targetLng;
+                      for (var s in servicesList) {
+                        final loc = s['location'];
+                        if (loc != null && loc is Map && loc['latitude'] != null && loc['longitude'] != null) {
+                          targetLat = loc['latitude'];
+                          targetLng = loc['longitude'];
+                          break;
+                        }
+                      }
+                      if (targetLat != null && targetLng != null) {
+                        final Uri uri = Uri.parse('google.navigation:q=$targetLat,$targetLng');
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri);
+                        } else {
+                          final Uri fallbackUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$targetLat,$targetLng');
+                          await launchUrl(fallbackUri);
+                        }
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Location unavailable for navigation')),
+                        );
+                      }
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Action selected: $label')),
+                      );
+                    }
                   },
                   child: Container(
                     constraints: const BoxConstraints(minHeight: 48),

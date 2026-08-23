@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:raahat/core/theme/design_tokens.dart';
 import 'package:raahat/core/theme/raahat_widgets.dart';
+import 'package:raahat/services/api_client.dart';
 
 /// Screen for managing simulated offline packs and on-device AI status.
 class OfflineScreen extends StatefulWidget {
@@ -16,6 +17,8 @@ class _OfflineScreenState extends State<OfflineScreen> {
   double _downloadProgress = 0.0;
   String _downloadStatusText = '';
 
+  Map<String, dynamic>? _offlinePackData;
+
   Future<void> _startDownloadSimulation() async {
     setState(() {
       _isDownloading = true;
@@ -24,47 +27,55 @@ class _OfflineScreenState extends State<OfflineScreen> {
       _downloadStatusText = 'Initializing Download...';
     });
 
-    await Future.delayed(const Duration(milliseconds: 400));
-    if (!mounted) return;
+    try {
+      final payload = {
+        'region_name': 'Indore to Bhopal Corridor',
+        'bounding_box': [
+          {'latitude': 22.7196, 'longitude': 75.8577},
+          {'latitude': 23.2599, 'longitude': 77.4126}
+        ],
+        'include_categories': [
+          'HOSPITAL', 'POLICE', 'MECHANIC', 'PUNCTURE_REPAIR', 'TOWING'
+        ]
+      };
 
-    setState(() {
-      _downloadProgress = 0.25;
-      _downloadStatusText = 'Downloading Route Map...';
-    });
+      setState(() {
+        _downloadProgress = 0.25;
+        _downloadStatusText = 'Requesting Pack from Server...';
+      });
 
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
+      final response = await ApiClient.instance.post('/offline-packs', payload);
+      final data = response['data'];
 
-    setState(() {
-      _downloadProgress = 0.55;
-      _downloadStatusText = 'Caching Local Providers...';
-    });
+      setState(() {
+        _downloadProgress = 0.75;
+        _downloadStatusText = 'Downloading Route Map & Providers...';
+      });
 
-    await Future.delayed(const Duration(milliseconds: 600));
-    if (!mounted) return;
+      // Simulate a small delay for downloading the full pack data
+      await Future.delayed(const Duration(milliseconds: 500));
 
-    setState(() {
-      _downloadProgress = 0.80;
-      _downloadStatusText = 'Assembling Offline RAG Index...';
-    });
-
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
-
-    setState(() {
-      _downloadProgress = 0.95;
-      _downloadStatusText = 'Verifying Pack Checksum...';
-    });
-
-    await Future.delayed(const Duration(milliseconds: 400));
-    if (!mounted) return;
-
-    setState(() {
-      _downloadProgress = 1.0;
-      _downloadStatusText = 'Offline Safety Pack Installed Successfully!';
-      _isDownloading = false;
-      _isInstalled = true;
-    });
+      if (!mounted) return;
+      setState(() {
+        _downloadProgress = 1.0;
+        _downloadStatusText = 'Offline Safety Pack Installed Successfully!';
+        _offlinePackData = data;
+        _isDownloading = false;
+        _isInstalled = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isDownloading = false;
+        _downloadStatusText = 'Failed to download pack: ${e.toString()}';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to download pack: ${e.toString()}'),
+          backgroundColor: RaahatColors.emergencyRed,
+        ),
+      );
+    }
   }
 
   @override
@@ -451,6 +462,24 @@ class _OfflineScreenState extends State<OfflineScreen> {
   }
 
   Widget _buildManifestCard(ThemeData theme) {
+    final manifest = _offlinePackData?['manifest'];
+    final providers = _offlinePackData?['providers'] as List<dynamic>? ?? [];
+    
+    final version = manifest?['version']?.toString() ?? '1.0.0';
+    final sizeBytes = manifest?['file_size_bytes'] ?? 24500000;
+    final sizeMb = (sizeBytes / (1024 * 1024)).toStringAsFixed(1);
+    final count = providers.length;
+
+    // Build the string for included data categories
+    final Map<String, int> providerCounts = {};
+    for (var p in providers) {
+      final type = p['service_type']?.toString().toUpperCase() ?? 'UNKNOWN';
+      providerCounts[type] = (providerCounts[type] ?? 0) + 1;
+    }
+    final includedDataString = providerCounts.entries
+        .map((e) => '${e.value} ${e.key}')
+        .join(', ');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -504,7 +533,7 @@ class _OfflineScreenState extends State<OfflineScreen> {
               ),
               const SizedBox(height: RaahatSpacing.sm),
               Text(
-                'Indore ➔ Bhopal Corridor (15km radius)',
+                manifest?['region_name']?.toString() ?? 'Indore ➔ Bhopal Corridor',
                 style: RaahatTypography.cardTitle(
                   color: RaahatColors.textPrimary,
                 ).copyWith(fontSize: 16),
@@ -517,7 +546,7 @@ class _OfflineScreenState extends State<OfflineScreen> {
                 theme,
                 icon: Icons.sd_storage_outlined,
                 label: 'Package Size',
-                value: '36.4 MB',
+                value: '$sizeMb MB (v$version)',
               ),
               const SizedBox(height: RaahatSpacing.md),
 
@@ -525,7 +554,7 @@ class _OfflineScreenState extends State<OfflineScreen> {
                 theme,
                 icon: Icons.local_hospital_outlined,
                 label: 'Included Data',
-                value: '8 Hospitals, 4 Police Stations, 12 Mechanics, 6 Puncture Shops',
+                value: includedDataString.isNotEmpty ? includedDataString : 'No services found',
               ),
               const SizedBox(height: RaahatSpacing.md),
 

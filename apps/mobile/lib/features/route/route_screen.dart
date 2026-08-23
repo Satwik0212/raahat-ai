@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:raahat/core/theme/design_tokens.dart';
 import 'package:raahat/core/theme/raahat_widgets.dart';
+import 'package:raahat/services/api_client.dart';
 
 /// Screen for planning safe emergency and evacuation routes.
 class RouteScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class _RouteScreenState extends State<RouteScreen> {
   bool _isCalculating = false;
   bool _hasRouteResult = false;
   String? _validationError;
+  Map<String, dynamic>? _routeData;
 
   @override
   void initState() {
@@ -53,14 +55,53 @@ class _RouteScreenState extends State<RouteScreen> {
       _validationError = null;
     });
 
-    await Future.delayed(const Duration(seconds: 1));
+    try {
+      // 1. Geocode Origin
+      final originGeo = await ApiClient.instance.get('/routes/geocode', queryParams: {'q': origin});
+      if (!originGeo.containsKey('data') || originGeo['data'] == null) {
+        throw Exception('Could not resolve Origin location.');
+      }
+      final originLat = originGeo['data']['latitude'];
+      final originLng = originGeo['data']['longitude'];
 
-    if (!mounted) return;
+      // 2. Geocode Destination
+      final destGeo = await ApiClient.instance.get('/routes/geocode', queryParams: {'q': destination});
+      if (!destGeo.containsKey('data') || destGeo['data'] == null) {
+        throw Exception('Could not resolve Destination location.');
+      }
+      final destLat = destGeo['data']['latitude'];
+      final destLng = destGeo['data']['longitude'];
 
-    setState(() {
-      _isCalculating = false;
-      _hasRouteResult = true;
-    });
+      // 3. Plan Route
+      final routePayload = {
+        'origin': {'latitude': originLat, 'longitude': originLng},
+        'destination': {'latitude': destLat, 'longitude': destLng},
+        'avoid_highways': false,
+        'avoid_tolls': false,
+      };
+
+      final routeResponse = await ApiClient.instance.post('/routes/plan', routePayload);
+      
+      if (!mounted) return;
+
+      setState(() {
+        _isCalculating = false;
+        _hasRouteResult = true;
+        _routeData = routeResponse['data'];
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isCalculating = false;
+        _validationError = 'Failed to plan route: ${e.toString()}';
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to plan route: ${e.toString()}'),
+          backgroundColor: RaahatColors.emergencyRed,
+        ),
+      );
+    }
   }
 
   void _handlePrepareOfflinePack() {
@@ -249,6 +290,9 @@ class _RouteScreenState extends State<RouteScreen> {
   }
 
   Widget _buildRouteSummaryCard(ThemeData theme, bool isSmallScreen) {
+    final distanceText = _routeData?['route']?['distance']?.toString() ?? 'N/A';
+    final durationText = _routeData?['route']?['duration']?.toString() ?? 'N/A';
+    final List<dynamic> services = _routeData?['services'] ?? [];
     final originText = _originController.text.trim() == 'My Current Location'
         ? 'Indore (Current)'
         : _originController.text.trim();
@@ -338,20 +382,19 @@ class _RouteScreenState extends State<RouteScreen> {
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          '192 KM',
-                          style: RaahatTypography.displayHero(
-                            fontSize: 30,
-                            color: RaahatColors.darkText,
+                          '$distanceText km',
+                          style: RaahatTypography.cardTitle(
+                            color: RaahatColors.textPrimary,
                           ),
                         ),
                       ),
                       Text(
-                        'Via NH-47 Clean',
-                        style: RaahatTypography.bodySmall(
-                          color: RaahatColors.darkMuted,
-                        ).copyWith(fontSize: 11),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                        'EST. $durationText',
+                        style: RaahatTypography.mono(
+                          fontSize: 12,
+                          color: RaahatColors.textMuted,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ],
                   ),
@@ -382,7 +425,7 @@ class _RouteScreenState extends State<RouteScreen> {
                         fit: BoxFit.scaleDown,
                         alignment: Alignment.centerLeft,
                         child: Text(
-                          '3H 45M',
+                          durationText.toUpperCase(),
                           style: RaahatTypography.displayHero(
                             fontSize: 30,
                             color: RaahatColors.darkGold,
@@ -390,12 +433,10 @@ class _RouteScreenState extends State<RouteScreen> {
                         ),
                       ),
                       Text(
-                        'Hazard buffer added',
+                        '${services.length} Emergency Facilities Found',
                         style: RaahatTypography.bodySmall(
-                          color: RaahatColors.darkMuted,
-                        ).copyWith(fontSize: 11),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                          color: RaahatColors.textMuted,
+                        ),
                       ),
                     ],
                   ),
@@ -404,7 +445,29 @@ class _RouteScreenState extends State<RouteScreen> {
             ],
           ),
           const SizedBox(height: RaahatSpacing.lg2),
-
+          if (services.isNotEmpty) ...[
+            Text(
+              'FACILITIES ALONG CORRIDOR',
+              style: RaahatTypography.mono(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: RaahatColors.textMuted,
+              ),
+            ),
+            const SizedBox(height: RaahatSpacing.base),
+            Wrap(
+              spacing: RaahatSpacing.sm,
+              runSpacing: RaahatSpacing.sm,
+              children: _groupServicesByType(services).entries.map((entry) {
+                return _buildFacilityBadge(
+                  label: '${entry.key}: ${entry.value}',
+                  icon: _getIconForServiceType(entry.key),
+                  color: _getColorForServiceType(entry.key),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: RaahatSpacing.lg2),
+          ],
           // Offline Pack CTA Button
           Container(
             constraints: const BoxConstraints(minHeight: 48),
@@ -452,5 +515,79 @@ class _RouteScreenState extends State<RouteScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildFacilityBadge({
+    required String label,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: RaahatSpacing.sm2,
+        vertical: RaahatSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(RaahatRadius.badge),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label.toUpperCase(),
+            style: RaahatTypography.monoBadge(color: color),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Map<String, int> _groupServicesByType(List<dynamic> services) {
+    final Map<String, int> counts = {};
+    for (var s in services) {
+      final type = s['service_type']?.toString().toUpperCase() ?? 'UNKNOWN';
+      counts[type] = (counts[type] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  IconData _getIconForServiceType(String type) {
+    switch (type) {
+      case 'HOSPITAL':
+      case 'AMBULANCE':
+        return Icons.local_hospital_rounded;
+      case 'POLICE':
+        return Icons.local_police_rounded;
+      case 'MECHANIC':
+      case 'PUNCTURE_REPAIR':
+      case 'TOWING':
+        return Icons.car_repair_rounded;
+      case 'FIRE_BRIGADE':
+        return Icons.local_fire_department_rounded;
+      default:
+        return Icons.build_rounded;
+    }
+  }
+
+  Color _getColorForServiceType(String type) {
+    switch (type) {
+      case 'HOSPITAL':
+      case 'AMBULANCE':
+        return RaahatColors.primaryBlue;
+      case 'POLICE':
+        return RaahatColors.textSecondary;
+      case 'MECHANIC':
+      case 'PUNCTURE_REPAIR':
+      case 'TOWING':
+        return RaahatColors.amber;
+      case 'FIRE_BRIGADE':
+        return RaahatColors.emergencyRed;
+      default:
+        return RaahatColors.textMuted;
+    }
   }
 }

@@ -36,7 +36,7 @@ class ApiClient {
 
   ApiClient._internal({
     http.Client? client,
-  }) : baseUrl = const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://10.0.2.2:8000/api/v1'),
+  }) : baseUrl = const String.fromEnvironment('API_BASE_URL', defaultValue: 'https://raahat-ai.onrender.com/api/v1'),
        _client = client ?? http.Client();
 
   factory ApiClient() {

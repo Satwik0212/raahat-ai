@@ -33,7 +33,6 @@ export const Navbar: React.FC = () => {
     { path: '/app', label: 'Emergency', icon: ShieldAlert },
     { path: '/nearby', label: 'Nearby Help', icon: MapPin },
     { path: '/route', label: 'Route Planner', icon: Navigation },
-    { path: '/offline', label: 'Offline Pack', icon: Download },
   ];
 
   return (

@@ -9,8 +9,6 @@ import { Signup } from './pages/Signup';
 import { Dashboard } from './pages/Dashboard';
 import { NearbyServices } from './pages/NearbyServices';
 import { RoutePlanner } from './pages/RoutePlanner';
-import { OfflinePack } from './pages/OfflinePack';
-
 /**
  * Inner layout that conditionally renders the app Navbar.
  * Landing, Login, and Signup manage their own nav — the app
@@ -18,7 +16,7 @@ import { OfflinePack } from './pages/OfflinePack';
  */
 const AppLayout: React.FC = () => {
   const location = useLocation();
-  const protectedPrefixes = ['/app', '/nearby', '/route', '/offline'];
+  const protectedPrefixes = ['/app', '/nearby', '/route'];
   const showAppNav = protectedPrefixes.some(p => location.pathname.startsWith(p));
 
   return (
@@ -47,11 +45,6 @@ const AppLayout: React.FC = () => {
           <Route path="/route" element={
             <ProtectedRoute>
               <RoutePlanner />
-            </ProtectedRoute>
-          } />
-          <Route path="/offline" element={
-            <ProtectedRoute>
-              <OfflinePack />
             </ProtectedRoute>
           } />
 

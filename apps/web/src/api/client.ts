@@ -148,6 +148,12 @@ export interface OfflinePackData {
   emergency_contacts?: Record<string, string>;
 }
 
+export interface GeocodeResponse {
+  latitude: number;
+  longitude: number;
+  display_name: string;
+}
+
 export function getDownloadUrl(packId: string): string {
   return `${API_BASE_URL}/offline-packs/${encodeURIComponent(packId)}/download`;
 }
