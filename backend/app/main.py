@@ -18,7 +18,10 @@ from app.api.v1 import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await create_all_tables()
+    try:
+        await create_all_tables()
+    except Exception as e:
+        logger.error(f"Lifespan table creation check warning: {e}")
     engine = get_engine()
     if engine is not None:
         try:

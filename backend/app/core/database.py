@@ -21,8 +21,24 @@ def get_engine():
         
     try:
         connect_args = {}
-        if "?ssl=require" in db_url:
-            db_url = db_url.replace("?ssl=require", "")
+        # Ensure asyncpg driver is specified
+        if db_url.startswith("postgres://"):
+            db_url = db_url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif db_url.startswith("postgresql://") and not db_url.startswith("postgresql+asyncpg://"):
+            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+        # Clean SSL parameters from query string for asyncpg
+        if "?sslmode=" in db_url:
+            db_url = db_url.split("?sslmode=")[0]
+            connect_args["ssl"] = "require"
+        elif "?ssl=" in db_url:
+            db_url = db_url.split("?ssl=")[0]
+            connect_args["ssl"] = "require"
+        elif "&sslmode=" in db_url:
+            db_url = db_url.split("&sslmode=")[0]
+            connect_args["ssl"] = "require"
+        elif "&ssl=" in db_url:
+            db_url = db_url.split("&ssl=")[0]
             connect_args["ssl"] = "require"
             
         _engine = create_async_engine(
@@ -73,8 +89,12 @@ async def create_all_tables():
     engine = get_engine()
     if engine is None:
         return
-    # import models to register them with Base.metadata before creating tables
-    import app.models.user
-    import app.models.conversation
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        # import models to register them with Base.metadata before creating tables
+        import app.models.user
+        import app.models.conversation
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables verified/created successfully.")
+    except Exception as e:
+        logger.warning(f"create_all_tables warning (continuing in degraded mode): {e}")
