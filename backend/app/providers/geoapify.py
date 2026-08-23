@@ -255,6 +255,60 @@ class GeoapifyPlacesProvider(BasePlacesProvider):
             logger.error(f"Geoapify request failed unexpectedly: {e}", exc_info=True)
             raise GeoapifyProviderError(f"Unexpected error: {e}")
 
+    async def geocode(self, text: str) -> Optional[Tuple[float, float, str]]:
+        if not settings.GEOAPIFY_API_KEY:
+            logger.warning("Geoapify key not configured. Falling back to Nominatim.")
+            return await self._fallback_geocode(text)
+
+        url = "https://api.geoapify.com/v1/geocode/search"
+        params = {
+            "text": text,
+            "apiKey": settings.GEOAPIFY_API_KEY,
+            "limit": 1
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(url, params=params)
+                if response.status_code == 200:
+                    data = response.json()
+                    features = data.get("features", [])
+                    if features:
+                        props = features[0].get("properties", {})
+                        lat = props.get("lat")
+                        lon = props.get("lon")
+                        display = props.get("formatted") or props.get("address_line1") or text
+                        if lat is not None and lon is not None:
+                            return (lat, lon, display)
+        except Exception as e:
+            logger.warning(f"Geoapify geocoding failed: {e}. Falling back to Nominatim.")
+        
+        return await self._fallback_geocode(text)
+
+    async def _fallback_geocode(self, text: str) -> Optional[Tuple[float, float, str]]:
+        url = "https://nominatim.openstreetmap.org/search"
+        params = {
+            "q": text,
+            "format": "json",
+            "limit": 1
+        }
+        headers = {
+            "User-Agent": "RAAHAT-Emergency-App/1.0"
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(url, params=params, headers=headers)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data and isinstance(data, list) and len(data) > 0:
+                        lat = float(data[0].get("lat"))
+                        lon = float(data[0].get("lon"))
+                        display = data[0].get("display_name") or text
+                        return (lat, lon, display)
+        except Exception as e:
+            logger.error(f"Nominatim fallback geocoding failed: {e}")
+        return None
+
+
 
 class GeoapifyRoutingProvider(BaseRoutingProvider):
     name = "geoapify_routing"
