@@ -10,19 +10,29 @@ from app.schemas.users import UserProfile
 
 security_scheme = HTTPBearer(auto_error=False)
 
+import json
+
 def init_firebase():
     if firebase_admin._apps:
         return
     
-    if os.path.exists(settings.FIREBASE_CREDENTIALS_PATH):
+    if settings.FIREBASE_CREDENTIALS_JSON:
+        try:
+            cred_dict = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+            logger.info("Firebase Admin SDK initialized successfully from FIREBASE_CREDENTIALS_JSON")
+        except Exception as e:
+            logger.warning(f"Failed to initialize Firebase Admin SDK from JSON: {e}. Auth will fall back to dev mode.")
+    elif os.path.exists(settings.FIREBASE_CREDENTIALS_PATH):
         try:
             cred = credentials.Certificate(settings.FIREBASE_CREDENTIALS_PATH)
             firebase_admin.initialize_app(cred)
             logger.info(f"Firebase Admin SDK initialized successfully from {settings.FIREBASE_CREDENTIALS_PATH}")
         except Exception as e:
-            logger.warning(f"Failed to initialize Firebase Admin SDK: {e}. Auth will fall back to dev mode.")
+            logger.warning(f"Failed to initialize Firebase Admin SDK from path: {e}. Auth will fall back to dev mode.")
     else:
-        logger.info(f"Firebase credentials file not found at {settings.FIREBASE_CREDENTIALS_PATH}. Running in auth-disabled mode.")
+        logger.info(f"Firebase credentials not provided. Running in auth-disabled mode.")
 
 init_firebase()
 

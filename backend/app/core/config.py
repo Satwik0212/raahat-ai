@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER_ORDER: str = "gemini,sarvam,groq"
     LLM_PROVIDER_TIMEOUT: float = 8.0
     FIREBASE_CREDENTIALS_PATH: str = "./firebase-key.json"
+    FIREBASE_CREDENTIALS_JSON: str = ""
     ENVIRONMENT: str = "development"
     AUTH_DISABLED: bool = True
     DATABASE_URL: str = "postgresql+asyncpg://postgres:password@localhost:5432/raahat"
