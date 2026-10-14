@@ -4,6 +4,7 @@ import 'package:raahat/core/location/location_service.dart';
 import 'package:raahat/services/services_service.dart';
 import 'package:raahat/core/theme/design_tokens.dart';
 import 'package:raahat/core/theme/raahat_widgets.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Screen listing nearby emergency services from the backend API.
 class ServicesScreen extends StatefulWidget {
@@ -454,10 +455,25 @@ class _ServicesScreenState extends State<ServicesScreen> {
               children: [
                 // Phone (Tappable)
                 InkWell(
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Calling $phone')),
-                    );
+                  onTap: () async {
+                    if (phone != 'No phone provided') {
+                      final Uri uri = Uri.parse('tel:$phone');
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri);
+                      } else {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Cannot dial this number.')),
+                          );
+                        }
+                      }
+                    } else {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('No phone number available.')),
+                        );
+                      }
+                    }
                   },
                   borderRadius: BorderRadius.circular(RaahatRadius.button),
                   child: Container(

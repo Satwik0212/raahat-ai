@@ -120,14 +120,14 @@ class ApiClient {
   ) async {
     try {
       final response = await requestAction().timeout(
-        const Duration(seconds: 45),
+        const Duration(seconds: 90),
       );
 
       return _processResponse(response);
     } on TimeoutException {
       throw ApiException(
         code: 'TIMEOUT_ERROR',
-        message: 'Request timed out after 45 seconds.',
+        message: 'Request timed out after 90 seconds.',
       );
     } on SocketException catch (e) {
       throw ApiException(

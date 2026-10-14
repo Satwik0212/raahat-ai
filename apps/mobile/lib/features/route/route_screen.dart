@@ -290,9 +290,9 @@ class _RouteScreenState extends State<RouteScreen> {
   }
 
   Widget _buildRouteSummaryCard(ThemeData theme, bool isSmallScreen) {
-    final distanceText = _routeData?['route']?['distance']?.toString() ?? 'N/A';
-    final durationText = _routeData?['route']?['duration']?.toString() ?? 'N/A';
-    final List<dynamic> services = _routeData?['services'] ?? [];
+    final distanceText = _routeData?['total_distance_km']?.toString() ?? 'N/A';
+    final durationText = _routeData?['total_duration_minutes'] != null ? '${_routeData!['total_duration_minutes'].round()}m' : 'N/A';
+    final List<dynamic> services = _routeData?['nearby_emergency_services'] ?? [];
     final originText = _originController.text.trim() == 'My Current Location'
         ? 'Indore (Current)'
         : _originController.text.trim();
@@ -384,7 +384,7 @@ class _RouteScreenState extends State<RouteScreen> {
                         child: Text(
                           '$distanceText km',
                           style: RaahatTypography.cardTitle(
-                            color: RaahatColors.textPrimary,
+                            color: RaahatColors.darkText,
                           ),
                         ),
                       ),
@@ -392,7 +392,7 @@ class _RouteScreenState extends State<RouteScreen> {
                         'EST. $durationText',
                         style: RaahatTypography.mono(
                           fontSize: 12,
-                          color: RaahatColors.textMuted,
+                          color: RaahatColors.darkMuted,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -451,7 +451,7 @@ class _RouteScreenState extends State<RouteScreen> {
               style: RaahatTypography.mono(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: RaahatColors.textMuted,
+                color: RaahatColors.darkMuted,
               ),
             ),
             const SizedBox(height: RaahatSpacing.base),
@@ -549,7 +549,10 @@ class _RouteScreenState extends State<RouteScreen> {
   Map<String, int> _groupServicesByType(List<dynamic> services) {
     final Map<String, int> counts = {};
     for (var s in services) {
-      final type = s['service_type']?.toString().toUpperCase() ?? 'UNKNOWN';
+      final types = s['service_types'] as List<dynamic>?;
+      final type = (types != null && types.isNotEmpty) 
+          ? types.first.toString().toUpperCase() 
+          : 'UNKNOWN';
       counts[type] = (counts[type] ?? 0) + 1;
     }
     return counts;
